@@ -15,47 +15,92 @@ namespace EasyVideoScreensaver
 
         public double ResumePosition { get; set; }
 
+        private static MySettings Defaults()
+        {
+            return new MySettings
+            {
+                VideoFilename = "",
+                StretchMode = "Fit",
+                Mute = false,
+                Volume = .5,
+                Resume = false,
+                ResumePosition = 0
+            };
+        }
+
         public void Save(string filename)
         {
-            using (StreamWriter sw = new StreamWriter(filename))
+            //Write to a temp file, then replace, so an interruption cannot corrupt the settings
+            string tmp = filename + ".tmp";
+            using (StreamWriter sw = new StreamWriter(tmp))
             {
                 XmlSerializer xmls = new XmlSerializer(typeof(MySettings));
                 xmls.Serialize(sw, this);
             }
+            if (File.Exists(filename))
+                File.Replace(tmp, filename, null);
+            else
+                File.Move(tmp, filename);
         }
 
         public static MySettings Load(string filename)
         {
-            MySettings settings;
-            if (System.IO.File.Exists(filename))
+            MySettings settings = null;
+            if (File.Exists(filename))
             {
-                //Load settings
-                using (StreamReader sw = new StreamReader(filename))
+                try
                 {
-                    XmlSerializer xmls = new XmlSerializer(typeof(MySettings));
-                    settings = xmls.Deserialize(sw) as MySettings;
+                    using (StreamReader sr = new StreamReader(filename))
+                    {
+                        XmlSerializer xmls = new XmlSerializer(typeof(MySettings));
+                        settings = xmls.Deserialize(sr) as MySettings;
+                    }
+                }
+                catch (Exception)
+                {
+                    //Corrupted or unreadable settings: fall back to defaults
+                    settings = null;
                 }
             }
-            else
-            {
-                //Get default settings
-                settings = new MySettings();
-                settings.VideoFilename = "";
-                settings.StretchMode = "Fit";
-                settings.Mute = false;
-                settings.Volume = .5;
-                settings.Resume = false;
-                settings.ResumePosition = 0;
-                return settings;
-            }
+            if (settings == null)
+                return Defaults();
 
             //Validate volume
-            if (settings.Volume < 0)
+            if (double.IsNaN(settings.Volume) || settings.Volume < 0)
                 settings.Volume = 0;
             if (settings.Volume > 1)
                 settings.Volume = 1;
 
+            //Validate resume position
+            if (double.IsNaN(settings.ResumePosition) || double.IsInfinity(settings.ResumePosition) || settings.ResumePosition < 0)
+                settings.ResumePosition = 0;
+
+            //Validate stretch mode
+            if (settings.StretchMode != "Fit" && settings.StretchMode != "Fill" && settings.StretchMode != "Center")
+                settings.StretchMode = "Fit";
+
+            //Accept only local file paths (no UNC shares, no URLs)
+            if (!IsLocalFilePath(settings.VideoFilename))
+                settings.VideoFilename = "";
+
             return settings;
+        }
+
+        private static bool IsLocalFilePath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return false;
+            try
+            {
+                Uri uri;
+                return Path.IsPathRooted(path)
+                    && Uri.TryCreate(path, UriKind.Absolute, out uri)
+                    && uri.IsFile && !uri.IsUnc;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
     }
 }

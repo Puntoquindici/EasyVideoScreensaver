@@ -44,9 +44,9 @@ namespace EasyVideoScreensaver
                         return;
                     case "/p":
                         //Preview
-                        if (e.Args.Length > 1)
+                        long handle;
+                        if (args.Length > 1 && long.TryParse(args[1], out handle) && handle > 0)
                         {
-                            int handle = Convert.ToInt32(e.Args[1]);
                             IntPtr hWnd = new IntPtr(handle);
                             ShowPreview(hWnd);
                         }
